@@ -1,57 +1,36 @@
 import base64
-import pyotp
-
-from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.asymmetric import padding as asy_padding
 
 
-def load_private_key(path: str):
-    with open(path, "rb") as f:
-        data = f.read()
-    return serialization.load_pem_private_key(data, password=None)
+def sign_message(message: str, private_key) -> bytes:
+    """
+    Sign commit hash using RSA-PSS with SHA-256 and maximum salt length.
+    Message must be signed as ASCII bytes (NOT hex-decoded).
+    """
+    message_bytes = message.encode("utf-8")
+
+    signature = private_key.sign(
+        message_bytes,
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
+        hashes.SHA256()
+    )
+    return signature
 
 
-def load_public_key(path: str):
-    with open(path, "rb") as f:
-        data = f.read()
-    return serialization.load_pem_public_key(data)
-
-
-def decrypt_seed(encrypted_seed_b64: str, private_key) -> str:
-    ciphertext = base64.b64decode(encrypted_seed_b64)
-
-    plaintext = private_key.decrypt(
-        ciphertext,
+def encrypt_with_public_key(data: bytes, public_key) -> bytes:
+    """
+    Encrypt signature bytes using RSA/OAEP with SHA-256.
+    """
+    encrypted = public_key.encrypt(
+        data,
         padding.OAEP(
             mgf=padding.MGF1(algorithm=hashes.SHA256()),
             algorithm=hashes.SHA256(),
-            label=None,
-        ),
+            label=None
+        )
     )
-
-    hex_seed = plaintext.decode("utf-8").strip()
-
-    allowed = set("0123456789abcdef")
-    if len(hex_seed) != 64 or any(c not in allowed for c in hex_seed):
-        raise ValueError("Invalid hex seed")
-
-    return hex_seed
-
-
-def hex_to_base32(hex_seed: str) -> str:
-    seed_bytes = bytes.fromhex(hex_seed)
-    b32 = base64.b32encode(seed_bytes).decode("utf-8")
-    return b32
-
-
-def generate_totp_code(hex_seed: str) -> str:
-    b32 = hex_to_base32(hex_seed)
-    totp = pyotp.TOTP(b32, digits=6, interval=30)
-    return totp.now()
-
-
-def verify_totp_code(hex_seed: str, code: str, valid_window: int = 1) -> bool:
-    b32 = hex_to_base32(hex_seed)
-    totp = pyotp.TOTP(b32, digits=6, interval=30)
-    return totp.verify(code, valid_window=valid_window)
+    return encrypted
