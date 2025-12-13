@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  app:
+    # Build the image from the Dockerfile in the current directory
+    build:
+      context: .
+      dockerfile: Dockerfile
+    
+    # Name the container for easy reference
+    container_name: pki-2fa-auth
+    
+    # Map port 8080 on your host to 8080 in the container
+    ports:
+      - "8080:8080"
+    
+    # Environment variables
+    environment:
+      # CRITICAL: Ensures the container uses UTC timezone for TOTP
+      - TZ=UTC
+    
+    # Persistence Configuration (Volumes)
+    volumes:
+      # 1. Persist decrypted seed data to a named volume
+      - seed-data:/data
+      # 2. Persist cron logs to a named volume
+      - cron-output:/cron
+      # 3. Mount key files so the app can use them (read-only)
+      - ./student_private.pem:/app/student_private.pem:ro
+      - ./student_public.pem:/app/student_public.pem:ro
+      - ./instructor_public.pem:/app/instructor_public.pem:ro
+    
+    # Restart policy
+    restart: unless-stopped
+
+# Define the named volumes
+volumes:
+  seed-data:
+  cron-output:
