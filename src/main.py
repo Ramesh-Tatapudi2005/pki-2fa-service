@@ -3,46 +3,36 @@ from pydantic import BaseModel
 import os
 import time
 
-from crypto_utils import (
+from src.crypto_utils import (
     decrypt_seed,
     load_private_key,
     generate_totp_code,
     verify_totp_code
 )
 
-app = FastAPI()
-
 PRIVATE_KEY_PATH = "/app/student_private.pem"
-SEED_FILE_PATH = "/data/seed.txt"   # persistent volume
+SEED_FILE_PATH = "/data/seed.txt"
 
+app = FastAPI()
 
 class DecryptRequest(BaseModel):
     encrypted_seed: str
 
-
 class VerifyRequest(BaseModel):
     code: str
-
 
 def get_hex_seed():
     if not os.path.exists(SEED_FILE_PATH):
         raise HTTPException(status_code=500, detail="Seed not decrypted yet")
 
-    try:
-        with open(SEED_FILE_PATH, "r") as f:
-            seed = f.read().strip()
-            if not seed:
-                raise HTTPException(status_code=500, detail="Seed file empty")
-            return seed
-    except:
-        raise HTTPException(status_code=500, detail="Failed to read seed file")
-
+    with open(SEED_FILE_PATH, "r") as f:
+        return f.read().strip()
 
 @app.post("/decrypt-seed")
-def api_decrypt_seed(req: DecryptRequest):
+def api_decrypt_seed(body: DecryptRequest):
     try:
-        private_key = load_private_key(PRIVATE_KEY_PATH)
-        seed = decrypt_seed(req.encrypted_seed, private_key)
+        pk = load_private_key(PRIVATE_KEY_PATH)
+        seed = decrypt_seed(body.encrypted_seed, pk)
 
         with open(SEED_FILE_PATH, "w") as f:
             f.write(seed)
@@ -51,23 +41,21 @@ def api_decrypt_seed(req: DecryptRequest):
     except Exception:
         raise HTTPException(status_code=500, detail="Decryption failed")
 
-
 @app.get("/generate-2fa")
 def api_generate_2fa():
-    seed = get_hex_seed()
-
-    code = generate_totp_code(seed)
-    valid_for = 30 - (int(time.time()) % 30)
-
-    return {"code": code, "valid_for": valid_for}
-
+    try:
+        seed = get_hex_seed()
+        code, valid_for = generate_totp_code(seed)
+        return {"code": code, "valid_for": valid_for}
+    except:
+        raise HTTPException(status_code=500, detail="TOTP generation failed")
 
 @app.post("/verify-2fa")
-def api_verify_2fa(req: VerifyRequest):
-    if not (req.code and req.code.isdigit() and len(req.code) == 6):
+def api_verify_2fa(body: VerifyRequest):
+    if not body.code.isdigit() or len(body.code) != 6:
         raise HTTPException(status_code=400, detail="Invalid code format")
 
     seed = get_hex_seed()
-    is_valid = verify_totp_code(seed, req.code)
+    is_valid = verify_totp_code(seed, body.code)
 
     return {"valid": is_valid}

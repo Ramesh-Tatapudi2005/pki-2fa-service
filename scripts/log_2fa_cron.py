@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 import time
 import os
-from crypto_utils import generate_totp_code
+from datetime import datetime
+from src.crypto_utils import generate_totp_code
 
 SEED_FILE = "/data/seed.txt"
 
-try:
+def read_seed():
     if not os.path.exists(SEED_FILE):
-        print("Seed not ready")
-        exit()
-
+        return None
     with open(SEED_FILE, "r") as f:
-        seed = f.read().strip()
+        return f.read().strip()
 
-    code = generate_totp_code(seed)
-    ts = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+def main():
+    seed = read_seed()
+    if not seed:
+        print("Seed not found")
+        return
 
-    print(f"{ts} - 2FA Code: {code}")
+    code, _ = generate_totp_code(seed)
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-except Exception as e:
-    print(f"CRON ERROR: {e}")
+    print(f"{timestamp} - 2FA Code: {code}")
+
+if __name__ == "__main__":
+    main()
