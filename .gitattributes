@@ -1,0 +1,5 @@
+
+cron/2fa-cron text eol=lf
+
+# IMPORTANT: Treat key files as binary to prevent Git from corrupting them
+*.pem binary
