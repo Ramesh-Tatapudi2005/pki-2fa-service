@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import os
-import time
 
 from src.crypto_utils import (
     decrypt_seed,
@@ -10,36 +9,48 @@ from src.crypto_utils import (
     verify_totp_code
 )
 
+app = FastAPI()   
+
 PRIVATE_KEY_PATH = "/app/student_private.pem"
 SEED_FILE_PATH = "/data/seed.txt"
 
-app = FastAPI()
 
 class DecryptRequest(BaseModel):
     encrypted_seed: str
 
+
 class VerifyRequest(BaseModel):
     code: str
+
 
 def get_hex_seed():
     if not os.path.exists(SEED_FILE_PATH):
         raise HTTPException(status_code=500, detail="Seed not decrypted yet")
 
     with open(SEED_FILE_PATH, "r") as f:
-        return f.read().strip()
+        seed = f.read().strip()
+
+    if not seed:
+        raise HTTPException(status_code=500, detail="Seed file empty")
+
+    return seed
+
 
 @app.post("/decrypt-seed")
 def api_decrypt_seed(body: DecryptRequest):
     try:
-        pk = load_private_key(PRIVATE_KEY_PATH)
-        seed = decrypt_seed(body.encrypted_seed, pk)
+        private_key = load_private_key(PRIVATE_KEY_PATH)
+        hex_seed = decrypt_seed(body.encrypted_seed, private_key)
 
         with open(SEED_FILE_PATH, "w") as f:
-            f.write(seed)
+            f.write(hex_seed)
 
         return {"status": "ok"}
-    except Exception:
+
+    except Exception as e:
+        print("Decryption error:", e)
         raise HTTPException(status_code=500, detail="Decryption failed")
+
 
 @app.get("/generate-2fa")
 def api_generate_2fa():
@@ -47,12 +58,14 @@ def api_generate_2fa():
         seed = get_hex_seed()
         code, valid_for = generate_totp_code(seed)
         return {"code": code, "valid_for": valid_for}
-    except:
+    except Exception as e:
+        print("Generate-2FA error:", e)
         raise HTTPException(status_code=500, detail="TOTP generation failed")
+
 
 @app.post("/verify-2fa")
 def api_verify_2fa(body: VerifyRequest):
-    if not body.code.isdigit() or len(body.code) != 6:
+    if not (body.code.isdigit() and len(body.code) == 6):
         raise HTTPException(status_code=400, detail="Invalid code format")
 
     seed = get_hex_seed()

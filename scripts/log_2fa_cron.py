@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
+
+import sys
+sys.path.append("/app")
 import time
 import os
 from datetime import datetime
 from src.crypto_utils import generate_totp_code
+
 
 SEED_FILE = "/data/seed.txt"
 
